@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 import os
+import re
 import traceback
 
 from django.contrib.auth.decorators import permission_required
@@ -49,8 +50,12 @@ logger = logging.getLogger("default")
 
 
 def index(request):
-    index_path_url = SysConfig().get("index_path_url", "sqlworkflow")
-    return HttpResponseRedirect(f"/{index_path_url.strip('/')}/")
+    default_index_path = "sqlworkflow"
+    index_path_url = SysConfig().get("index_path_url", default_index_path)
+    index_path = str(index_path_url or "").strip().strip("/")
+    if not index_path or not re.fullmatch(r"[A-Za-z0-9/_-]+", index_path):
+        index_path = default_index_path
+    return HttpResponseRedirect(f"/{index_path}/")
 
 
 def login(request):

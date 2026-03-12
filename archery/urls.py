@@ -2,12 +2,17 @@ from django.urls import include, path
 from django.contrib import admin
 from common import views
 from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(("sql_api.urls", "sql_api"), namespace="sql_api")),
     path("", include(("sql.urls", "sql"), namespace="sql")),
 ]
+
+# 在开发环境下提供静态文件服务
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 if settings.ENABLE_CAS:  # pragma: no cover
     import django_cas_ng.views

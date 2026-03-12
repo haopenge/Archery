@@ -73,6 +73,19 @@ class MysqlEngine(EngineBase):
         super().__init__(instance=instance)
         self.config = SysConfig()
         self.inc_engine = GoInceptionEngine()
+        self._conn_driver = "mysqldb"
+
+    @property
+    def cursor_cls(self):
+        if self._conn_driver == "pymysql":
+            return pymysql.cursors.Cursor
+        return MySQLdb.cursors.Cursor
+
+    @property
+    def dict_cursor_cls(self):
+        if self._conn_driver == "pymysql":
+            return pymysql.cursors.DictCursor
+        return MySQLdb.cursors.DictCursor
 
     def get_connection(self, db_name=None):
         # https://stackoverflow.com/questions/19256155/python-mysqldb-returning-x01-for-bit-values
@@ -81,27 +94,35 @@ class MysqlEngine(EngineBase):
         if self.conn:
             self.thread_id = self.conn.thread_id()
             return self.conn
+        mysql_db_kwargs = {
+            "host": self.host,
+            "port": self.port,
+            "user": self.user,
+            "passwd": self.password,
+            "charset": self.instance.charset or "utf8mb4",
+            "conv": conversions,
+            "connect_timeout": 10,
+        }
+        py_mysql_kwargs = {
+            "host": self.host,
+            "port": self.port,
+            "user": self.user,
+            "password": self.password,
+            "charset": self.instance.charset or "utf8mb4",
+            "connect_timeout": 10,
+        }
         if db_name:
-            self.conn = MySQLdb.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                passwd=self.password,
-                db=db_name,
-                charset=self.instance.charset or "utf8mb4",
-                conv=conversions,
-                connect_timeout=10,
-            )
-        else:
-            self.conn = MySQLdb.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                passwd=self.password,
-                charset=self.instance.charset or "utf8mb4",
-                conv=conversions,
-                connect_timeout=10,
-            )
+            mysql_db_kwargs["db"] = db_name
+            py_mysql_kwargs["db"] = db_name
+        try:
+            self.conn = MySQLdb.connect(**mysql_db_kwargs)
+            self._conn_driver = "mysqldb"
+        except Exception as e:
+            if "mysql_native_password" in str(e) and "cannot be loaded" in str(e):
+                self.conn = pymysql.connect(**py_mysql_kwargs)
+                self._conn_driver = "pymysql"
+            else:
+                raise
         self.thread_id = self.conn.thread_id()
         return self.conn
 
@@ -125,7 +146,7 @@ class MysqlEngine(EngineBase):
         slave_status = self.query(
             sql=status_sql,
             close_conn=False,
-            cursorclass=MySQLdb.cursors.DictCursor,
+            cursorclass=self.dict_cursor_cls,
         )
         return (
             slave_status.rows[0].get("Seconds_Behind_Master")
@@ -304,7 +325,7 @@ class MysqlEngine(EngineBase):
         sql_tbs = f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=%(db_name)s ORDER BY TABLE_SCHEMA,TABLE_NAME;"
         tbs = self.query(
             sql=sql_tbs,
-            cursorclass=MySQLdb.cursors.DictCursor,
+            cursorclass=self.dict_cursor_cls,
             close_conn=False,
             parameters={"db_name": db_name},
         ).rows
@@ -326,7 +347,7 @@ class MysqlEngine(EngineBase):
                             WHERE TABLE_SCHEMA='{tb['TABLE_SCHEMA']}' AND TABLE_NAME='{tb['TABLE_NAME']}'
                             ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION;"""
             _meta["COLUMNS"] = self.query(
-                sql=sql_cols, cursorclass=MySQLdb.cursors.DictCursor, close_conn=False
+                sql=sql_cols, cursorclass=self.dict_cursor_cls, close_conn=False
             ).rows
             table_metas.append(_meta)
         return table_metas
@@ -518,14 +539,14 @@ class MysqlEngine(EngineBase):
         """返回 ResultSet"""
         result_set = ResultSet(full_sql=sql)
         max_execution_time = kwargs.get("max_execution_time", 0)
-        cursorclass = kwargs.get("cursorclass") or MySQLdb.cursors.Cursor
+        cursorclass = kwargs.get("cursorclass") or self.cursor_cls
         try:
             conn = self.get_connection(db_name=db_name)
             conn.autocommit(True)
             cursor = conn.cursor(cursorclass)
             try:
                 cursor.execute(f"set session max_execution_time={max_execution_time};")
-            except MySQLdb.OperationalError:
+            except (MySQLdb.OperationalError, pymysql.err.OperationalError):
                 pass
             effect_row = cursor.execute(sql, parameters)
             if int(limit_num) > 0:

@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# 收集所有的静态文件到STATIC_ROOT
-python3 manage.py collectstatic -v0 --noinput
+# 激活虚拟环境
+source .venv/bin/activate
+
+# 收集所有的静态文件到 STATIC_ROOT
+python manage.py collectstatic -v0 --noinput
 
 # 启动服务
 supervisord -c supervisord.conf

@@ -5,6 +5,26 @@
 # Author: alenx <alenx.hai@gmail.com>
 #########################################################################
 
+function setup_env() {
+    if [[ -f "./.venv/bin/activate" ]]; then
+        source ./.venv/bin/activate
+        PYTHON_BIN="./.venv/bin/python3"
+    elif [[ -f "./venv/bin/activate" ]]; then
+        source ./venv/bin/activate
+        PYTHON_BIN="./venv/bin/python3"
+    elif [[ -f "/opt/venv4archery/bin/activate" ]]; then
+        source /opt/venv4archery/bin/activate
+        PYTHON_BIN="/opt/venv4archery/bin/python3"
+    else
+        PYTHON_BIN="python3"
+    fi
+
+    if ! "$PYTHON_BIN" -c "import django" >/dev/null 2>&1; then
+        echo "未找到可用的Django运行环境，请先执行 sh admin.sh init 或安装依赖"
+        exit 1
+    fi
+}
+
 function init() {
     echo "Initing archery"
     echo "----------------"
@@ -27,8 +47,8 @@ function init() {
 function start() {
     echo "Starting archery"
     echo "----------------"
-    source ./venv/bin/activate
-    python3 manage.py collectstatic -v0 --noinput
+    setup_env
+    "$PYTHON_BIN" manage.py collectstatic -v0 --noinput
     supervisord -c supervisord.conf
     echo -e "Start archery:                 [\033[32m ok \033[0m]"
 }
@@ -36,7 +56,7 @@ function start() {
 function stop() {
     echo "Stoping archery"
     echo "----------------"
-    source ./venv/bin/activate
+    setup_env
     supervisorctl -c supervisord.conf stop all
     kill -9 $(ps -ef | grep "Archery" | grep -v grep | awk '{print $2}')
     echo -e "Stop archery:                  [\033[32m ok \033[0m]"
@@ -50,19 +70,19 @@ function restart() {
 
 function adduser() {
     echo "Add Admin Users "
-    source ./venv/bin/activate
-    python3 manage.py createsuperuser
+    setup_env
+    "$PYTHON_BIN" manage.py createsuperuser
     echo -e "Add Users:                 [\033[32m ok \033[0m]"
 }
 
 function migration() {
     echo "Migration archery"
     echo "----------------"
-    source ./venv/bin/activate
-    python3 manage.py makemigrations sql
-    python3 manage.py migrate
-    python3 manage.py dbshell<sql/fixtures/auth_group.sql
-    python3 manage.py dbshell<src/init_sql/mysql_slow_query_review.sql
+    setup_env
+    "$PYTHON_BIN" manage.py makemigrations sql
+    "$PYTHON_BIN" manage.py migrate
+    "$PYTHON_BIN" manage.py dbshell<sql/fixtures/auth_group.sql
+    "$PYTHON_BIN" manage.py dbshell<src/init_sql/mysql_slow_query_review.sql
     if [ $? == "0" ]; then
         echo -e "Migration:                 [\033[32m ok \033[0m]"
     else

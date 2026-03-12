@@ -17,6 +17,10 @@ IGNORE_URL = [
     "/cas/authenticate/",
 ]
 
+IGNORE_PREFIX = [
+    "/static/",  # 静态文件不需要认证
+]
+
 IGNORE_URL_RE = r"/api/(v1|auth)/\w+"
 
 
@@ -27,9 +31,13 @@ class CheckLoginMiddleware(MiddlewareMixin):
         该函数在每个函数之前检查是否登录，若未登录，则重定向到/login/
         """
         if not request.user.is_authenticated:
-            # 以下是不用跳转到login页面的url白名单
+            # 以下是不用跳转到 login 页面的 url 白名单
+            # 检查是否匹配忽略前缀
+            is_ignored_prefix = any(request.path.startswith(prefix) for prefix in IGNORE_PREFIX)
+            
             if (
                 request.path not in IGNORE_URL
+                and not is_ignored_prefix
                 and re.match(IGNORE_URL_RE, request.path) is None
                 and not (
                     re.match(r"/user/qrcode/\w+", request.path)
