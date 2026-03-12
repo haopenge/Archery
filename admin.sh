@@ -48,7 +48,6 @@ function start() {
     echo "Starting archery"
     echo "----------------"
     setup_env
-    "$PYTHON_BIN" manage.py collectstatic -v0 --noinput
     supervisord -c supervisord.conf
     echo -e "Start archery:                 [\033[32m ok \033[0m]"
 }

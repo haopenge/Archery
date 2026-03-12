@@ -18,3 +18,5 @@ local_settings.py
 src/docker-compose-dev
 .coverage
 archery_custom
+.venv/
+src/docker-compose/mysql/datadir/
