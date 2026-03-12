@@ -20,3 +20,5 @@ src/docker-compose-dev
 archery_custom
 .venv/
 src/docker-compose/mysql/datadir/
+supervisor.sock
+supervisord.pid
