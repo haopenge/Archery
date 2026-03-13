@@ -135,6 +135,11 @@
                                         <a href="/data_dictionary/">数据字典</a>
                                     </li>
                                 {% endif %}
+                                {% if perms.sql.menu_ai_dict %}
+                                    <li>
+                                        <a href="/ai_dict/">AI字典</a>
+                                    </li>
+                                {% endif %}
                                 {% if perms.sql.menu_queryapplylist %}
                                     <li>
                                         <a href="/queryapplylist/">权限管理</a>

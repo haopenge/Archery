@@ -473,7 +473,7 @@ LOGGING = {
     "loggers": {
         "default": {  # default日志
             "handlers": ["console", "default"],
-            "level": "WARNING",
+            "level": "INFO",
         },
         "django-q": {  # django_q模块相关日志
             "handlers": ["console", "django-q"],

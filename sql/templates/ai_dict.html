@@ -1,0 +1,741 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="panel panel-default">
+        <div class="panel-heading">AI提示词模板</div>
+        <div class="panel-body">
+            <div style="margin-top: 5px;">
+                <label for="default_query_template">DEFAULT_QUERY_TEMPLATE</label>
+                <textarea class="form-control" id="default_query_template"
+                          rows="2"
+                          style="resize: vertical; overflow-y: hidden; min-height: 260px;"
+                          placeholder="默认生成SQL语句的Django模板, 无模板会导致生成结果失败, 需提供db_type/ai_dict/table_schema/user_input"
+                {% if not can_edit_query_template %}readonly{% endif %}>{{ default_query_template }}</textarea>
+            </div>
+            <div style="margin-top: 10px;">
+                <button id="btn_save_query_template" class="btn btn-primary"
+                        {% if not can_edit_query_template %}disabled="disabled"{% endif %}>保存模板</button>
+            </div>
+            <div class="form-inline" style="margin-top: 12px;">
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="template_preview_instance" class="form-control selectpicker"
+                            title="选择实例" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="template_preview_db" class="form-control selectpicker"
+                            title="选择数据库" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="template_preview_tables" class="form-control selectpicker"
+                            title="选择表(可多选)" data-live-search="true"
+                            data-actions-box="true" multiple>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px; min-width: 420px;">
+                    <input id="template_preview_word" class="form-control" style="width: 100%;" placeholder="输入测试词">
+                </div>
+                <div class="form-group">
+                    <button id="btn_preview_template" class="btn btn-default">测试模板</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="panel panel-default">
+        <div class="panel-heading">已保存字典</div>
+        <div class="panel-body">
+            <div class="form-inline" style="margin-bottom: 10px;">
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="saved_instance_name" class="form-control selectpicker"
+                            title="按实例筛选" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="saved_db_name" class="form-control selectpicker"
+                            title="按数据库筛选" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <input id="saved_keyword" class="form-control" placeholder="按实例/库/表搜索">
+                </div>
+                <div class="form-group">
+                    <button id="btn_query_saved" class="btn btn-default">查询</button>
+                </div>
+            </div>
+            <table class="table table-striped table-hover">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>实例</th>
+                    <th>数据库</th>
+                    <th>表</th>
+                    <th>已选列数</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="saved_table_body"></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="panel panel-default">
+        <div class="panel-heading">AI字典</div>
+        <div class="panel-body">
+            <div class="form-inline">
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="instance_name" class="form-control selectpicker"
+                            title="请选择实例" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="db_name" class="form-control selectpicker"
+                            title="请选择数据库" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group" style="margin-right: 10px;">
+                    <select id="tb_name" class="form-control selectpicker"
+                            title="请选择表" data-live-search="true">
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button id="btn_save" class="btn btn-primary" disabled="disabled">保存</button>
+                </div>
+            </div>
+            <div style="margin-top: 15px;">
+                <label>表备注(可编辑)</label>
+                <input id="table_comment" class="form-control" placeholder="请输入表备注">
+            </div>
+            <div style="margin-top: 15px;">
+                <label>DDL</label>
+                <textarea id="ddl" class="form-control" rows="8" readonly></textarea>
+            </div>
+            <div style="margin-top: 15px;">
+                <table id="column_table" class="table table-striped table-hover">
+                    <thead>
+                    <tr>
+                        <th style="width: 90px;">选择</th>
+                        <th>列名</th>
+                        <th>类型</th>
+                        <th>原备注</th>
+                        <th>备注(可编辑)</th>
+                    </tr>
+                    </thead>
+                    <tbody id="column_table_body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="template_preview_modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
+                            aria-hidden="true">×</span></button>
+                    <h4 class="modal-title">替换后的完整提示词</h4>
+                </div>
+                <div class="modal-body">
+                    <label>模板渲染结果</label>
+                    <textarea id="template_preview_content" class="form-control" rows="18" readonly></textarea>
+                    <div style="margin-top: 12px;">
+                        <button id="btn_execute_ai_preview" class="btn btn-primary">AI执行</button>
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <label>AI执行结果</label>
+                        <textarea id="template_ai_result_content" class="form-control" rows="10" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock content %}
+
+{% block js %}
+    <script>
+        function resizeDefaultQueryTemplate() {
+            var defaultQueryTemplate = $("#default_query_template");
+            if (defaultQueryTemplate.length === 0) {
+                return;
+            }
+            defaultQueryTemplate.css("height", "auto");
+            defaultQueryTemplate.css("height", defaultQueryTemplate[0].scrollHeight + "px");
+        }
+
+        function resetColumns() {
+            $("#ddl").val("");
+            $("#table_comment").val("");
+            $("#column_table_body").empty();
+            $("#btn_save").prop("disabled", true);
+        }
+
+        function renderColumns(columns) {
+            $("#column_table_body").empty();
+            for (var i = 0; i < columns.length; i++) {
+                var row = columns[i];
+                var checkbox = $("<input>", {type: "checkbox", "class": "col-selected"}).prop("checked", row.selected);
+                var commentInput = $("<input>", {type: "text", "class": "form-control col-comment"}).val(row.comment || "");
+                var tr = $("<tr>")
+                    .append($("<td>").append(checkbox))
+                    .append($("<td>").addClass("col-name").text(row.column_name || ""))
+                    .append($("<td>").addClass("col-type").text(row.column_type || ""))
+                    .append($("<td>").addClass("col-origin").text(row.origin_comment || ""))
+                    .append($("<td>").append(commentInput));
+                $("#column_table_body").append(tr);
+            }
+            $("#btn_save").prop("disabled", columns.length === 0);
+        }
+
+        function loadDatabases(callback) {
+            $("#db_name").empty();
+            $("#tb_name").empty();
+            $("#db_name").selectpicker("refresh");
+            $("#tb_name").selectpicker("refresh");
+            resetColumns();
+            $.ajax({
+                type: "get",
+                url: "/instance/instance_resource/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#instance_name").val(),
+                    resource_type: "database"
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || [];
+                        for (var i = 0; i < result.length; i++) {
+                            $("#db_name").append("<option value='" + result[i] + "'>" + result[i] + "</option>");
+                        }
+                        $("#db_name").selectpicker("render");
+                        $("#db_name").selectpicker("refresh");
+                        if (callback) {
+                            callback();
+                        }
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadTables(callback) {
+            $("#tb_name").empty();
+            $("#tb_name").selectpicker("refresh");
+            resetColumns();
+            $.ajax({
+                type: "get",
+                url: "/instance/instance_resource/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#instance_name").val(),
+                    db_name: $("#db_name").val(),
+                    resource_type: "table"
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || [];
+                        for (var i = 0; i < result.length; i++) {
+                            $("#tb_name").append("<option value='" + result[i] + "'>" + result[i] + "</option>");
+                        }
+                        $("#tb_name").selectpicker("render");
+                        $("#tb_name").selectpicker("refresh");
+                        if (callback) {
+                            callback();
+                        }
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadTableMeta(callback) {
+            resetColumns();
+            $.ajax({
+                type: "get",
+                url: "/ai_dict/table_meta/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#instance_name").val(),
+                    db_name: $("#db_name").val(),
+                    tb_name: $("#tb_name").val()
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        $("#ddl").val(data.data.ddl || "");
+                        $("#table_comment").val(data.data.table_comment || "");
+                        renderColumns(data.data.columns || []);
+                        if (callback) {
+                            callback();
+                        }
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function collectProperties() {
+            var properties = [];
+            $("#column_table_body tr").each(function () {
+                var isSelected = $(this).find(".col-selected").is(":checked");
+                if (!isSelected) {
+                    return;
+                }
+                properties.push({
+                    column_name: $(this).find(".col-name").text(),
+                    column_type: $(this).find(".col-type").text(),
+                    comment: $(this).find(".col-comment").val()
+                });
+            });
+            return properties;
+        }
+
+        function renderSavedList(rows) {
+            $("#saved_table_body").empty();
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var btnEdit = $("<button>", {"class": "btn btn-xs btn-primary", "style": "margin-right: 6px;"}).text("编辑");
+                btnEdit.data("row", row);
+                btnEdit.click(function () {
+                    openSavedDict($(this).data("row"));
+                });
+                var btnDelete = $("<button>", {"class": "btn btn-xs btn-danger"}).text("删除");
+                btnDelete.data("row", row);
+                btnDelete.click(function () {
+                    var current = $(this).data("row");
+                    deleteSavedDict(current);
+                });
+                var operation = $("<td>").append(btnEdit).append(btnDelete);
+                var tr = $("<tr>")
+                    .append($("<td>").text(row.id))
+                    .append($("<td>").text(row.instance || ""))
+                    .append($("<td>").text(row.db || ""))
+                    .append($("<td>").text(row.table || ""))
+                    .append($("<td>").text(row.selected_count))
+                    .append($("<td>").text(row.update_time || ""))
+                    .append(operation);
+                $("#saved_table_body").append(tr);
+            }
+        }
+
+        function deleteSavedDict(row) {
+            if (!row || !row.id) {
+                return;
+            }
+            if (!confirm("确认删除该字典记录吗？")) {
+                return;
+            }
+            $.ajax({
+                type: "post",
+                url: "/ai_dict/delete/",
+                dataType: "json",
+                data: {
+                    id: row.id
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        alert(data.msg);
+                        loadSavedList();
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadSavedList() {
+            $.ajax({
+                type: "get",
+                url: "/ai_dict/list/",
+                dataType: "json",
+                data: {
+                    keyword: $("#saved_keyword").val(),
+                    instance_name: $("#saved_instance_name").val(),
+                    db_name: $("#saved_db_name").val()
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        renderSavedList(data.data || []);
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadSavedFilterDatabases(callback) {
+            $("#saved_db_name").empty();
+            $("#saved_db_name").append("<option value=''>全部数据库</option>");
+            $("#saved_db_name").selectpicker("render");
+            $("#saved_db_name").selectpicker("refresh");
+            if (!$("#saved_instance_name").val()) {
+                if (callback) {
+                    callback();
+                }
+                return;
+            }
+            $.ajax({
+                type: "get",
+                url: "/instance/instance_resource/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#saved_instance_name").val(),
+                    resource_type: "database"
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || [];
+                        for (var i = 0; i < result.length; i++) {
+                            $("#saved_db_name").append("<option value='" + result[i] + "'>" + result[i] + "</option>");
+                        }
+                        $("#saved_db_name").selectpicker("render");
+                        $("#saved_db_name").selectpicker("refresh");
+                        if (callback) {
+                            callback();
+                        }
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadTemplatePreviewDatabases(callback) {
+            $("#template_preview_db").empty();
+            $("#template_preview_tables").empty();
+            $("#template_preview_db").selectpicker("render");
+            $("#template_preview_db").selectpicker("refresh");
+            $("#template_preview_tables").selectpicker("render");
+            $("#template_preview_tables").selectpicker("refresh");
+            if (!$("#template_preview_instance").val()) {
+                if (callback) {
+                    callback();
+                }
+                return;
+            }
+            $.ajax({
+                type: "get",
+                url: "/instance/instance_resource/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#template_preview_instance").val(),
+                    resource_type: "database"
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || [];
+                        for (var i = 0; i < result.length; i++) {
+                            $("#template_preview_db").append("<option value='" + result[i] + "'>" + result[i] + "</option>");
+                        }
+                        $("#template_preview_db").selectpicker("render");
+                        $("#template_preview_db").selectpicker("refresh");
+                        if (callback) {
+                            callback();
+                        }
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function loadTemplatePreviewTables() {
+            $("#template_preview_tables").empty();
+            $("#template_preview_tables").selectpicker("render");
+            $("#template_preview_tables").selectpicker("refresh");
+            if (!$("#template_preview_instance").val() || !$("#template_preview_db").val()) {
+                return;
+            }
+            $.ajax({
+                type: "get",
+                url: "/ai_dict/list/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#template_preview_instance").val(),
+                    db_name: $("#template_preview_db").val()
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var rows = data.data || [];
+                        for (var i = 0; i < rows.length; i++) {
+                            $("#template_preview_tables").append("<option value='" + rows[i].table + "'>" + rows[i].table + "</option>");
+                        }
+                        $("#template_preview_tables").selectpicker("render");
+                        $("#template_preview_tables").selectpicker("refresh");
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        }
+
+        function openSavedDict(row) {
+            if (!row || !row.instance || !row.db || !row.table) {
+                return;
+            }
+            if ($("#instance_name option[value='" + row.instance + "']").length === 0) {
+                $("#instance_name").append("<option value='" + row.instance + "'>" + row.instance + "</option>");
+                $("#instance_name").selectpicker("render");
+                $("#instance_name").selectpicker("refresh");
+            }
+            $("#instance_name").selectpicker("val", row.instance);
+            loadDatabases(function () {
+                if ($("#db_name option[value='" + row.db + "']").length === 0) {
+                    $("#db_name").append("<option value='" + row.db + "'>" + row.db + "</option>");
+                    $("#db_name").selectpicker("render");
+                    $("#db_name").selectpicker("refresh");
+                }
+                $("#db_name").selectpicker("val", row.db);
+                loadTables(function () {
+                    if ($("#tb_name option[value='" + row.table + "']").length === 0) {
+                        $("#tb_name").append("<option value='" + row.table + "'>" + row.table + "</option>");
+                        $("#tb_name").selectpicker("render");
+                        $("#tb_name").selectpicker("refresh");
+                    }
+                    $("#tb_name").selectpicker("val", row.table);
+                    loadTableMeta();
+                });
+            });
+        }
+
+        $(function () {
+            resizeDefaultQueryTemplate();
+            $.ajax({
+                type: "get",
+                url: "/group/user_all_instances/",
+                dataType: "json",
+                data: {
+                    db_type: ["mysql"]
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || [];
+                        $("#instance_name").empty();
+                        $("#saved_instance_name").empty();
+                        $("#template_preview_instance").empty();
+                        $("#saved_instance_name").append("<option value=''>全部实例</option>");
+                        for (var i = 0; i < result.length; i++) {
+                            $("#instance_name").append("<option value='" + result[i].instance_name + "'>" + result[i].instance_name + "</option>");
+                            $("#saved_instance_name").append("<option value='" + result[i].instance_name + "'>" + result[i].instance_name + "</option>");
+                            $("#template_preview_instance").append("<option value='" + result[i].instance_name + "'>" + result[i].instance_name + "</option>");
+                        }
+                        $("#instance_name").selectpicker("render");
+                        $("#instance_name").selectpicker("refresh");
+                        $("#saved_instance_name").selectpicker("render");
+                        $("#saved_instance_name").selectpicker("refresh");
+                        $("#template_preview_instance").selectpicker("render");
+                        $("#template_preview_instance").selectpicker("refresh");
+                        loadSavedFilterDatabases(function () {
+                            loadSavedList();
+                        });
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        });
+
+        $("#default_query_template").on("input", function () {
+            resizeDefaultQueryTemplate();
+        });
+
+        $("#btn_save_query_template").click(function () {
+            var value = $("#default_query_template").val();
+            if (!value) {
+                alert("模板不能为空");
+                return;
+            }
+            $.ajax({
+                type: "post",
+                url: "/ai_dict/save_query_template/",
+                dataType: "json",
+                data: {
+                    query_template: value
+                },
+                success: function (data) {
+                    alert(data.msg);
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        });
+
+        $("#btn_preview_template").click(function () {
+            var previewInstance = $("#template_preview_instance").val();
+            var previewDb = $("#template_preview_db").val();
+            var previewTables = $("#template_preview_tables").val() || [];
+            var testWord = $("#template_preview_word").val();
+            var queryTemplate = $("#default_query_template").val();
+            if (!previewInstance) {
+                alert("请选择实例");
+                return;
+            }
+            if (!previewDb) {
+                alert("请选择数据库");
+                return;
+            }
+            if (previewTables.length === 0) {
+                alert("请选择至少一个表");
+                return;
+            }
+            if (!testWord) {
+                alert("请输入测试词");
+                return;
+            }
+            if (!queryTemplate) {
+                alert("模板不能为空");
+                return;
+            }
+            $.ajax({
+                type: "post",
+                url: "/ai_dict/template_preview/",
+                dataType: "json",
+                data: {
+                    instance_name: previewInstance,
+                    db_name: previewDb,
+                    table_names: previewTables.join(","),
+                    user_input: testWord,
+                    query_template: queryTemplate
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        $("#template_preview_content").val(data.data || "");
+                        $("#template_ai_result_content").val("");
+                        $("#template_preview_modal").modal("show");
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        });
+
+        $("#btn_execute_ai_preview").click(function () {
+            var previewInstance = $("#template_preview_instance").val();
+            var previewDb = $("#template_preview_db").val();
+            var previewTables = $("#template_preview_tables").val() || [];
+            var testWord = $("#template_preview_word").val();
+            if (!previewInstance) {
+                alert("请选择实例");
+                return;
+            }
+            if (!previewDb) {
+                alert("请选择数据库");
+                return;
+            }
+            if (previewTables.length === 0) {
+                alert("请选择至少一个表");
+                return;
+            }
+            if (!testWord) {
+                alert("请输入测试词");
+                return;
+            }
+            $.ajax({
+                type: "post",
+                url: "/ai_dict/ai_execute/",
+                dataType: "json",
+                data: {
+                    instance_name: previewInstance,
+                    db_name: previewDb,
+                    table_names: previewTables.join(","),
+                    user_input: testWord
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        $("#template_ai_result_content").val(data.data || "");
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        });
+
+        $("#instance_name").change(function () {
+            loadDatabases();
+        });
+
+        $("#db_name").change(function () {
+            loadTables();
+        });
+
+        $("#tb_name").change(function () {
+            loadTableMeta();
+        });
+
+        $("#btn_save").click(function () {
+            $.ajax({
+                type: "post",
+                url: "/ai_dict/save/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#instance_name").val(),
+                    db_name: $("#db_name").val(),
+                    tb_name: $("#tb_name").val(),
+                    table_comment: $("#table_comment").val(),
+                    properties: JSON.stringify(collectProperties())
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        alert(data.msg);
+                        loadSavedList();
+                    } else {
+                        alert(data.msg);
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert(errorThrown);
+                }
+            });
+        });
+
+        $("#btn_query_saved").click(function () {
+            loadSavedList();
+        });
+
+        $("#saved_instance_name").change(function () {
+            loadSavedFilterDatabases();
+        });
+
+        $("#template_preview_instance").change(function () {
+            loadTemplatePreviewDatabases();
+        });
+
+        $("#template_preview_db").change(function () {
+            loadTemplatePreviewTables();
+        });
+    </script>
+{% endblock %}

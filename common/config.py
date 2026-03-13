@@ -4,12 +4,15 @@ import traceback
 
 import simplejson as json
 from django.http import HttpResponse
+from django_redis import get_redis_connection
 
 from common.utils.permission import superuser_required
 from sql.models import Config
 from django.db import transaction
 
 logger = logging.getLogger("default")
+DEFAULT_QUERY_TEMPLATE_KEY = "default_query_template"
+DEFAULT_QUERY_TEMPLATE_CACHE_KEY = "sys_config:default_query_template"
 
 
 class SysConfig(object):
@@ -33,6 +36,13 @@ class SysConfig(object):
             self.sys_config = {}
 
     def get(self, key, default_value=None):
+        if key == DEFAULT_QUERY_TEMPLATE_KEY:
+            redis_value = self._get_redis_value(DEFAULT_QUERY_TEMPLATE_CACHE_KEY)
+            if redis_value is not None:
+                if isinstance(redis_value, str) and redis_value.strip() == "":
+                    return default_value
+                self.sys_config[key] = redis_value
+                return redis_value
         value = self.sys_config.get(key)
         if value:
             return value
@@ -41,6 +51,10 @@ class SysConfig(object):
         if config_entry:
             # 清洗成 python 的 bool
             value = self.filter_bool(config_entry.value)
+            if key == DEFAULT_QUERY_TEMPLATE_KEY:
+                self._set_redis_value(
+                    DEFAULT_QUERY_TEMPLATE_CACHE_KEY, str(config_entry.value)
+                )
         # 是字符串的话, 如果是空, 或者全是空格, 返回默认值
         if isinstance(value, str) and value.strip() == "":
             return default_value
@@ -73,16 +87,23 @@ class SysConfig(object):
         result = {"status": 0, "msg": "ok", "data": []}
         # 清空并替换
         try:
+            config_list = json.loads(configs)
+            default_query_template_value = None
+            db_configs = []
+            for items in config_list:
+                config_key = items["key"].strip()
+                config_value = str(items["value"]).strip()
+                if config_key == DEFAULT_QUERY_TEMPLATE_KEY:
+                    default_query_template_value = config_value
+                    continue
+                db_configs.append(Config(item=config_key, value=config_value))
+            if default_query_template_value is not None:
+                self._set_redis_value(
+                    DEFAULT_QUERY_TEMPLATE_CACHE_KEY, default_query_template_value
+                )
             with transaction.atomic():
                 self.purge()
-                Config.objects.bulk_create(
-                    [
-                        Config(
-                            item=items["key"].strip(), value=str(items["value"]).strip()
-                        )
-                        for items in json.loads(configs)
-                    ]
-                )
+                Config.objects.bulk_create(db_configs)
         except Exception as e:
             logger.error(traceback.format_exc())
             result["status"] = 1
@@ -99,6 +120,37 @@ class SysConfig(object):
                 self.sys_config = {}
         except Exception as m:
             logger.error(f"删除缓存失败:{m}{traceback.format_exc()}")
+
+    @staticmethod
+    def _get_redis_connection():
+        try:
+            return get_redis_connection("default")
+        except Exception as e:
+            logger.error(f"获取redis连接失败:{e}")
+            return None
+
+    def _get_redis_value(self, key):
+        redis_conn = self._get_redis_connection()
+        if not redis_conn:
+            return None
+        try:
+            value = redis_conn.get(key)
+            if isinstance(value, bytes):
+                return value.decode("utf8")
+            return value
+        except Exception as e:
+            logger.error(f"读取redis缓存失败:{e}")
+            return None
+
+    def _set_redis_value(self, key, value):
+        redis_conn = self._get_redis_connection()
+        if not redis_conn:
+            return
+        try:
+            redis_conn.set(key, value)
+            self.sys_config[DEFAULT_QUERY_TEMPLATE_KEY] = value
+        except Exception as e:
+            logger.error(f"写入redis缓存失败:{e}")
 
 
 # 修改系统配置

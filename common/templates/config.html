@@ -1177,6 +1177,23 @@
                             </div>
                         </div>
                         
+                        <h4 style="color: darkgrey; display: inline;"><b>AI提供商 配置</b></h4>
+                        <hr/>
+                        <div class="form-horizontal">
+                            <div class="form-group">
+                                <label for="ai_provider"
+                                       class="col-sm-4 control-label">AI_PROVIDER</label>
+                                <div class="col-sm-5">
+                                    <select id="ai_provider" key="ai_provider"
+                                            class="selectpicker show-tick form-control bs-select-hidden">
+                                        <option value="auto" {% if config.ai_provider == "auto" %}selected{% endif %}>auto</option>
+                                        <option value="openai" {% if config.ai_provider == "openai" %}selected{% endif %}>openai</option>
+                                        <option value="siliconflow" {% if config.ai_provider == "siliconflow" %}selected{% endif %}>siliconflow</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <h4 style="color: darkgrey; display: inline;"><b>OPENAI 配置</b></h4>
                         <h6 style="color:red">注1：若无OPENAI_API_KEY配置，则不开启相关功能</h6>
                         <h6 style="color:red">注2：DEFAULT_CHAT_MODEL 默认配置为gpt-3.5-turbo，DEFAULT_QUERY_TEMPLATE 默认配置为系统定义的模板</h6>
@@ -1212,14 +1229,48 @@
                                            placeholder="openai default chat model" />
                                 </div>
                             </div>
+                        </div>
+
+                        <h4 style="color: darkgrey; display: inline;"><b>硅基流动 配置</b></h4>
+                        <hr/>
+                        <div class="form-horizontal">
                             <div class="form-group">
-                                <label for="default_query_template"
-                                       class="col-sm-4 control-label">DEFAULT_QUERY_TEMPLATE</label>
+                                <label for="siliconflow_url"
+                                       class="col-sm-4 control-label">siliconflow_url</label>
                                 <div class="col-sm-5">
-                                    <input type="text" class="form-control" id="default_query_template"
-                                           key="default_query_template"
-                                           value="{{ config.default_query_template }}"
-                                           placeholder="默认生成SQL语句的Django模板, 无模板会导致生成结果失败, 需提供db_type/table_schema/user_input" />
+                                    <input type="text" class="form-control" id="siliconflow_url"
+                                           key="siliconflow_url"
+                                           value="{{ config.siliconflow_url }}"
+                                           placeholder="siliconflow url" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="siliconflow_key"
+                                       class="col-sm-4 control-label">siliconflow_key</label>
+                                <div class="col-sm-5">
+                                    <input type="password" class="form-control" id="siliconflow_key"
+                                           key="siliconflow_key"
+                                           value="{{ config.siliconflow_key }}"
+                                           placeholder="siliconflow key" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="siliconflow_model"
+                                       class="col-sm-4 control-label">SILICONFLOW_MODEL</label>
+                                <div class="col-sm-5">
+                                    <div class="input-group">
+                                        <select id="siliconflow_model" key="siliconflow_model"
+                                                class="selectpicker show-tick form-control bs-select-hidden"
+                                                data-live-search="true"
+                                                data-none-selected-text="请选择硅基流动模型">
+                                            {% if config.siliconflow_model %}
+                                                <option value="{{ config.siliconflow_model }}" selected>{{ config.siliconflow_model }}</option>
+                                            {% endif %}
+                                        </select>
+                                        <span class="input-group-btn">
+                                            <button id="btn_load_siliconflow_models" class="btn btn-default" type="button">拉取模型</button>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1597,6 +1648,47 @@
             }
         });
 
+        function loadSiliconflowModels(forceRefresh, silent) {
+            var siliconflowUrl = $("#siliconflow_url").val();
+            var siliconflowKey = $("#siliconflow_key").val();
+            var currentModel = $("#siliconflow_model").val();
+            $.ajax({
+                type: "post",
+                url: "/check/siliconflow_models/",
+                dataType: "json",
+                data: {
+                    siliconflow_url: siliconflowUrl,
+                    siliconflow_key: siliconflowKey,
+                    force_refresh: forceRefresh ? 1 : 0
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var rows = data.data || [];
+                        $("#siliconflow_model").empty();
+                        for (var i = 0; i < rows.length; i++) {
+                            $("#siliconflow_model").append("<option value='" + rows[i] + "'>" + rows[i] + "</option>");
+                        }
+                        if (currentModel && $("#siliconflow_model option[value='" + currentModel + "']").length > 0) {
+                            $("#siliconflow_model").selectpicker("val", currentModel);
+                        } else if (rows.length > 0) {
+                            $("#siliconflow_model").selectpicker("val", rows[0]);
+                        }
+                        $("#siliconflow_model").selectpicker("render");
+                        $("#siliconflow_model").selectpicker("refresh");
+                    } else {
+                        if (!silent) {
+                            alert(data.msg);
+                        }
+                    }
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    if (!silent) {
+                        alert(errorThrown);
+                    }
+                }
+            });
+        }
+
         // 修改系统设置
         $("#saveconfig").click(function () {
             // 当开启钉钉通知到个人时，企业id和secret等必须填写
@@ -1648,6 +1740,12 @@
                 }
             });
         });
+
+        $("#btn_load_siliconflow_models").click(function () {
+            loadSiliconflowModels(true, false);
+        });
+
+        loadSiliconflowModels(false, true);
 
         // 切换组触发工单类型切换事件
         $("#group").change(function () {
@@ -1979,4 +2077,3 @@
         })
     </script>
 {% endblock %}
-

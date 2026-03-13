@@ -2,12 +2,15 @@
 import os
 import re
 import traceback
+import hashlib
+import json
+import requests
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponseRedirect, FileResponse, Http404
+from django.http import HttpResponseRedirect, FileResponse, Http404, JsonResponse
 from django.urls import reverse
 
 from django.conf import settings
@@ -510,6 +513,20 @@ def data_dictionary(request):
     return render(request, "data_dictionary.html", locals())
 
 
+@permission_required("sql.menu_ai_dict", raise_exception=True)
+def ai_dict(request):
+    default_query_template = SysConfig().get("default_query_template", "")
+    if not default_query_template:
+        default_query_template = (
+            "你是一个熟悉 {{db_type}} 的工程师, 我会给你一些基本信息和要求, 你会生成一个查询语句给我使用, 不要返回任何注释和序号, 仅返回查询语句：\n\n数据字典（仅限操作以下表，严禁访问任何其他表）：\n{{ai_dict}}\n\n{{user_input}}\n\n根据ai字典的配置列表，将每行记录按\netl_user_invite_relation (用户邀请关系表){\n    user_id bigint 用户id,\n    up_user text 上级用户，C为当前用户，多级示例 A|B,\n    up_user_with_me text 上级用户id and me, C为当前用户，多级示例 A|B|C\n}\n格式，替换 ai 模板中的 ai_dict。"
+        )
+    context = {
+        "default_query_template": default_query_template,
+        "can_edit_query_template": request.user.is_superuser,
+    }
+    return render(request, "ai_dict.html", context)
+
+
 @permission_required("sql.menu_param", raise_exception=True)
 def instance_param(request):
     """实例参数管理页面"""
@@ -606,10 +623,23 @@ def config(request):
     sys_config = {}
     for items in all_config:
         sys_config[items["item"]] = items["value"]
+    default_query_template = SysConfig().get("default_query_template", "")
+    if default_query_template:
+        sys_config["default_query_template"] = default_query_template
 
     # 设置OPENAI部分配置不存在时的默认值
+    if not sys_config.get("ai_provider", ""):
+        sys_config["ai_provider"] = "auto"
     if not sys_config.get("default_chat_model", ""):
         sys_config["default_chat_model"] = "gpt-3.5-turbo"
+    if not sys_config.get("siliconflow_url", ""):
+        sys_config["siliconflow_url"] = sys_config.get(
+            "siliconflow_URL", "https://api.siliconflow.cn/v1"
+        )
+    if not sys_config.get("siliconflow_key", ""):
+        sys_config["siliconflow_key"] = sys_config.get("siliconflow_KEY", "")
+    if not sys_config.get("siliconflow_model", ""):
+        sys_config["siliconflow_model"] = "Pro/zai-org/GLM-4.7"
     if not sys_config.get("default_query_template", ""):
         sys_config["default_query_template"] = (
             "你是一个熟悉 {{db_type}} 的工程师, 我会给你一些基本信息和要求, 你会生成一个查询语句给我使用, 不要返回任何注释和序号, 仅返回查询语句：{{table_schema}} \n {{user_input}}"
@@ -624,6 +654,98 @@ def config(request):
         "workflow_choices": WorkflowType,
     }
     return render(request, "config.html", context)
+
+
+@superuser_required
+def siliconflow_models(request):
+    if request.method != "POST":
+        return JsonResponse({"status": 1, "msg": "非法调用", "data": []})
+    all_config = SysConfig()
+    base_url = str(
+        request.POST.get("siliconflow_url", "")
+        or request.POST.get("siliconflow_URL", "")
+        or all_config.get("siliconflow_url")
+        or all_config.get("siliconflow_URL", "https://api.siliconflow.cn/v1")
+    ).strip()
+    api_key = str(
+        request.POST.get("siliconflow_key", "")
+        or request.POST.get("siliconflow_KEY", "")
+        or all_config.get("siliconflow_key")
+        or all_config.get("siliconflow_KEY", "")
+    ).strip()
+    if not base_url or not api_key:
+        return JsonResponse(
+            {"status": 1, "msg": "请先填写siliconflow_url和siliconflow_key", "data": []}
+        )
+    force_refresh = str(request.POST.get("force_refresh", "0")).lower() in [
+        "1",
+        "true",
+        "yes",
+    ]
+    cache_key = (
+        "siliconflow:models:"
+        + hashlib.md5(f"{base_url}|{api_key}".encode("utf-8")).hexdigest()
+    )
+    redis_conn = SysConfig._get_redis_connection()
+    if redis_conn and not force_refresh:
+        try:
+            cache_value = redis_conn.get(cache_key)
+            if isinstance(cache_value, bytes):
+                cache_value = cache_value.decode("utf-8")
+            if cache_value:
+                models = json.loads(cache_value)
+                if isinstance(models, list) and models:
+                    return JsonResponse({"status": 0, "msg": "ok", "data": models})
+        except Exception as e:
+            logger.warning(f"读取siliconflow模型缓存失败: {e}")
+        return JsonResponse({"status": 1, "msg": "缓存无可用模型，请点击“拉取模型”更新", "data": []})
+    normalized = base_url.rstrip("/")
+    candidate_urls = [normalized + "/models"]
+    if not normalized.endswith("/v1"):
+        candidate_urls.append(normalized + "/v1/models")
+    headers = {"Authorization": f"Bearer {api_key}"}
+    params = {"type": "text", "sub_type": "chat"}
+    payload = {}
+    last_status = 0
+    last_body = ""
+    try:
+        success = False
+        for url in candidate_urls:
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
+            last_status = resp.status_code
+            last_body = (resp.text or "")[:300]
+            if resp.status_code == 200:
+                payload = resp.json()
+                success = True
+                break
+        if not success:
+            return JsonResponse(
+                {
+                    "status": 1,
+                    "msg": f"拉取模型失败: HTTP {last_status}, 请检查siliconflow_url是否包含/v1",
+                    "data": [],
+                }
+            )
+    except Exception as e:
+        return JsonResponse({"status": 1, "msg": f"拉取模型失败: {e}", "data": []})
+    rows = payload.get("data", []) if isinstance(payload, dict) else []
+    models = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model_name = str(row.get("id") or row.get("model") or row.get("name") or "").strip()
+        if model_name and model_name not in models:
+            models.append(model_name)
+    if not models:
+        if last_body:
+            return JsonResponse({"status": 1, "msg": f"未获取到可用模型: {last_body}", "data": []})
+        return JsonResponse({"status": 1, "msg": "未获取到可用模型", "data": []})
+    if redis_conn:
+        try:
+            redis_conn.setex(cache_key, 3600, json.dumps(models, ensure_ascii=False))
+        except Exception as e:
+            logger.warning(f"缓存siliconflow模型列表失败: {e}")
+    return JsonResponse({"status": 0, "msg": "ok", "data": models})
 
 
 @superuser_required

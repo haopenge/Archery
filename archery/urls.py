@@ -1,10 +1,9 @@
-import os
-
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.contrib import admin
 from common import views
 from django.conf import settings
-from django.conf.urls.static import static
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.contrib.staticfiles.views import serve as staticfiles_serve
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -14,10 +13,11 @@ urlpatterns = [
 
 # 在开发环境下提供静态文件服务
 if settings.DEBUG:
-    urlpatterns += static(
-        settings.STATIC_URL,
-        document_root=os.path.join(settings.BASE_DIR, "common/static"),
-    )
+    urlpatterns += staticfiles_urlpatterns()
+else:
+    urlpatterns += [
+        re_path(r"^static/(?P<path>.*)$", staticfiles_serve, {"insecure": True}),
+    ]
 
 if settings.ENABLE_CAS:  # pragma: no cover
     import django_cas_ng.views

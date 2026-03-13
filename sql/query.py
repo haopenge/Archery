@@ -17,10 +17,88 @@ from common.utils.timer import FuncTimer
 from sql.query_privileges import query_priv_check
 from sql.utils.resource_group import user_instances
 from sql.utils.tasks import add_kill_conn_schedule, del_schedule
-from .models import QueryLog, Instance
+from .models import QueryLog, Instance, AiDict
 from sql.engines import get_engine
 
 logger = logging.getLogger("default")
+
+
+def build_ai_dict_schema(
+    instance_name: str, db_name: str, table_names: list = None
+) -> str:
+    queryset = AiDict.objects.filter(instance=instance_name, db=db_name)
+    if table_names:
+        queryset = queryset.filter(table__in=table_names)
+    tables = []
+    for obj in queryset.order_by("table"):
+        try:
+            properties = json.loads(obj.properties)
+        except Exception:
+            continue
+        table_comment = ""
+        columns = []
+        if isinstance(properties, dict):
+            table_comment = str(properties.get("table_comment", "") or "").strip()
+            columns = properties.get("columns", [])
+        elif isinstance(properties, list):
+            columns = properties
+        if not isinstance(columns, list):
+            continue
+        column_lines = []
+        for item in columns:
+            if not isinstance(item, dict):
+                continue
+            column_name = str(item.get("column_name", "")).strip()
+            if not column_name:
+                continue
+            column_type = str(item.get("column_type", "")).strip()
+            comment = str(item.get("comment", "")).strip()
+            column_parts = [column_name]
+            if column_type:
+                column_parts.append(column_type)
+            if comment:
+                column_parts.append(comment)
+            column_lines.append(f"    {' '.join(column_parts)},")
+        if not column_lines:
+            continue
+        table_title = obj.table
+        if table_comment:
+            table_title = f"{table_title} ({table_comment})"
+        tables.append(f"{table_title}{{\n" + "\n".join(column_lines) + "\n}")
+    return "\n\n".join(tables)
+
+
+@permission_required("sql.menu_sqlquery", raise_exception=True)
+def ai_dict_options(request):
+    instance_name = request.GET.get("instance_name", "")
+    db_name = request.GET.get("db_name", "")
+    if not instance_name or not db_name:
+        return HttpResponse(
+            json.dumps({"status": 1, "msg": "参数不完整", "data": []}),
+            content_type="application/json",
+        )
+    if not user_instances(request.user).filter(instance_name=instance_name).exists():
+        return HttpResponse(
+            json.dumps({"status": 1, "msg": "你所在组未关联该实例", "data": []}),
+            content_type="application/json",
+        )
+    rows = []
+    queryset = AiDict.objects.filter(instance=instance_name, db=db_name).order_by("table")
+    for obj in queryset:
+        table_comment = ""
+        try:
+            properties = json.loads(obj.properties)
+            if isinstance(properties, dict):
+                table_comment = str(properties.get("table_comment", "") or "").strip()
+        except Exception:
+            table_comment = ""
+        rows.append(
+            {"table": obj.table, "table_comment": table_comment, "id": obj.id}
+        )
+    return HttpResponse(
+        json.dumps({"status": 0, "msg": "ok", "data": rows}),
+        content_type="application/json",
+    )
 
 
 @permission_required("sql.query_submit", raise_exception=True)
@@ -342,23 +420,35 @@ def generate_sql(request):
     db_name = request.POST.get("db_name")
     schema_name = request.POST.get("schema_name")
     tb_name = request.POST.get("tb_name")
+    ai_dict_tables = str(request.POST.get("ai_dict_tables", "")).strip()
+    selected_ai_dict_tables = [i.strip() for i in ai_dict_tables.split(",") if i.strip()]
 
     result = {"status": 0, "msg": "ok", "data": ""}
     try:
-        query_engine = get_engine(instance=instance)
-        query_result = query_engine.describe_table(
-            db_name, tb_name, schema_name=schema_name
+        ai_dict_schema = build_ai_dict_schema(
+            instance_name, db_name, selected_ai_dict_tables
         )
+        if selected_ai_dict_tables and not ai_dict_schema:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "所选AI字典不存在", "data": []}),
+                content_type="application/json",
+            )
+        table_schema = ai_dict_schema
+        if not table_schema and not selected_ai_dict_tables and tb_name:
+            query_engine = get_engine(instance=instance)
+            query_result = query_engine.describe_table(
+                db_name, tb_name, schema_name=schema_name
+            )
+            if len(query_result.rows) != 0:
+                table_schema = query_result.rows[0][-1]
+            else:
+                table_schema = ""
+        elif not table_schema:
+            table_schema = ""
         openai_client = OpenaiClient()
-        # 有些不存在表结构, 例如 redis
-        if len(query_result.rows) != 0:
-            result["data"] = openai_client.generate_sql_by_openai(
-                db_type, query_result.rows[0][-1], query_desc
-            )
-        else:
-            result["data"] = openai_client.generate_sql_by_openai(
-                db_type, "", query_desc
-            )
+        result["data"] = openai_client.generate_sql_by_openai(
+            db_type, table_schema, query_desc, ai_dict=ai_dict_schema
+        )
     except Exception as msg:
         result["status"] = 1
         result["msg"] = str(msg)
@@ -377,7 +467,7 @@ def check_openai(request):
             json.dumps(
                 {
                     "status": 1,
-                    "msg": "openai 缺少配置, 必需配置[openai_base_url, openai_api_key, default_chat_model]",
+                    "msg": "AI 缺少配置, openai需配置[openai_api_key], siliconflow需配置[siliconflow_key]",
                     "data": False,
                 }
             ),

@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 
 {% block content %}
+    <style>
+        #ai_dict_tables_wrapper {
+            width: 460px;
+            margin: 0 8px;
+            vertical-align: middle;
+        }
+
+        #ai_dict_tables_wrapper .bootstrap-select,
+        #ai_dict_tables_wrapper .bootstrap-select .dropdown-toggle {
+            width: 100% !important;
+        }
+
+        #ai_dict_tables_wrapper .filter-option-inner-inner,
+        #ai_dict_tables_wrapper .dropdown-menu li a .text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
     <!-- 自定义操作按钮-->
     <div id="query-log-toolbar" class="form-inline pull-left">
         <div class="form-group">
@@ -67,11 +86,21 @@
                             {% endif %}
                         {% endif %}
                     </div>
-                    <textarea id="generateDesc" class="form-control" style="display: none;width: 70%;" placeholder="AI 查询描述" rows=1></textarea>
-                    <input id="btn-generatesql" type="button" class="btn btn-info" style="display: none" value="生成SQL"/>
-                    <button id="btn-openaiTooltip" type="button" class="btn" style="display: none" data-toggle="tooltip" title="仅此操作会与 AI 交互, 收集数据库类型、表结构以及输入框信息, 交给 AI 生成 SQL 并置于下面的语句框中" >
+                    <div id="ai_dict_tables_wrapper" style="display: inline-block;">
+                        <select id="ai_dict_tables" name="ai_dict_tables"
+                                class="form-control selectpicker"
+                                data-live-search="true" data-live-search-placeholder="搜索AI字典"
+                                data-actions-box="true" multiple
+                                title="AI字典范围(可多选)"
+                                data-width="100%">
+                        </select>
+                    </div>
+                    <input id="btn-generatesql" type="button" class="btn btn-info" style="display: none;vertical-align: middle;" value="生成SQL"/>
+                    <button id="btn-openaiTooltip" type="button" class="btn" style="display: none;vertical-align: middle;" data-toggle="tooltip" title="仅此操作会与 AI 交互, 收集数据库类型、表结构以及输入框信息, 交给 AI 生成 SQL 并置于下面的语句框中" >
                         <span class="fa fa-question-circle" />
                     </button>
+                    <div class="clearfix"></div>
+                    <textarea id="generateDesc" class="form-control" style="display: none;width: 70%;margin-top: 8px;" placeholder="AI 查询描述" rows=1></textarea>
                 </div>
                 <div class="panel-body">
                     <form id="form-sqlquery" action="/sqlquery/" method="post" class="form-horizontal" role="form">
@@ -523,12 +552,56 @@
                 success: function (data) {
                     if (data["data"]) {
                         $("#generateDesc").show()
+                        update_ai_dict_selector()
                         $("#btn-generatesql").show()
                         $("#btn-openaiTooltip").show()
                     }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
                     alert(errorThrown);
+                }
+            });
+        }
+
+        function update_ai_dict_selector() {
+            $("#ai_dict_tables_wrapper").css("display", "inline-block")
+        }
+
+        function clear_ai_dict_selector() {
+            $("#ai_dict_tables").empty();
+            $("#ai_dict_tables").selectpicker('render');
+            $("#ai_dict_tables").selectpicker('refresh');
+            update_ai_dict_selector();
+        }
+
+        function load_ai_dict_selector() {
+            clear_ai_dict_selector();
+            if (!$("#instance_name").val() || !$("#db_name").val()) {
+                return;
+            }
+            $.ajax({
+                type: "get",
+                url: "/query/ai_dict_options/",
+                dataType: "json",
+                data: {
+                    instance_name: $("#instance_name").val(),
+                    db_name: $("#db_name").val()
+                },
+                success: function (data) {
+                    if (data.status !== 0) {
+                        return;
+                    }
+                    var result = data.data || [];
+                    for (var i = 0; i < result.length; i++) {
+                        var optionText = result[i].table;
+                        if (result[i].table_comment) {
+                            optionText = optionText + " (" + result[i].table_comment + ")";
+                        }
+                        var option = "<option value=\"" + result[i].table + "\">" + optionText + "</option>";
+                        $("#ai_dict_tables").append(option);
+                    }
+                    $("#ai_dict_tables").selectpicker('render');
+                    $("#ai_dict_tables").selectpicker('refresh');
                 }
             });
         }
@@ -664,18 +737,14 @@
         //提交AI生成sql语句请求
         $("#btn-generatesql").click(function () {
                 var check = false
-                var optgroup = $('#instance_name :selected').parent().attr('label')
                 var instance_name = $("#instance_name").val()
                 var db_name = $("#db_name").val()
-                var tb_name = $("#table_name").val()
                 var query_desc = $("#generateDesc").val()
 
                 if (!instance_name) {
                     alert("请选择实例！")
                 } else if (!db_name) {
                     alert("请选择数据库！")
-                } else if (optgroup !== 'Redis' && !tb_name){
-                    alert("请选择表结构！")
                 } else if (!query_desc) {
                     alert("请输入查询描述！")
                 } else {
@@ -1110,6 +1179,12 @@
         }
 
         function generatesql() {
+            var generateBtn = $("#btn-generatesql");
+            var originalText = generateBtn.data("origin-text") || generateBtn.val();
+            generateBtn.data("origin-text", originalText);
+            generateBtn.val("生成中...");
+            generateBtn.addClass("disabled");
+            generateBtn.prop("disabled", true);
             var optgroup = $('#instance_name :selected').parent().attr('label');
             const data = {
                 db_type: optgroup,
@@ -1117,6 +1192,7 @@
                 db_name: $("#db_name").val(),
                 schema_name: $("#schema_name").val(),
                 tb_name: $("#table_name").val(),
+                ai_dict_tables: ($("#ai_dict_tables").val() || []).join(","),
                 query_desc: $("#generateDesc").val(),
             }
             //提交请求
@@ -1126,18 +1202,45 @@
                 dataType: "json",
                 data: data,
                 complete: function () {
+                    generateBtn.val(originalText);
+                    generateBtn.removeClass("disabled");
+                    generateBtn.prop("disabled", false);
                     $('input[type=button]').removeClass('disabled');
                     $('input[type=button]').prop('disabled', false);
                     optgroup_control();
                 },
                 success: function (data) {
-                    editor.setValue(data["data"]);
-                    editor.clearSelection();
+                    if (data.status === 0) {
+                        editor.setValue(data["data"]);
+                        editor.clearSelection();
+                        showGenerateSqlTip("SQL 生成完成", false);
+                    } else {
+                        showGenerateSqlTip(data.msg || "SQL 生成失败", true);
+                    }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showGenerateSqlTip(errorThrown || "SQL 生成失败", true);
                 }
             });
+        }
+
+        function showGenerateSqlTip(message, isError) {
+            var tip = $("#generate-sql-tip");
+            if (tip.length === 0) {
+                tip = $("<span id='generate-sql-tip' style='display:none;margin-left:8px;'></span>");
+                $("#btn-openaiTooltip").after(tip);
+            }
+            tip.removeClass("text-success");
+            tip.removeClass("text-danger");
+            tip.addClass(isError ? "text-danger" : "text-success");
+            tip.text(message);
+            tip.stop(true, true).show();
+            if (window.generateSqlTipTimer) {
+                clearTimeout(window.generateSqlTipTimer);
+            }
+            window.generateSqlTipTimer = setTimeout(function () {
+                tip.fadeOut(300);
+            }, 2000);
         }
 
         function dosqlquery() {
@@ -1210,6 +1313,7 @@
 
         //实例变更获取数据库
         $("#instance_name").change(function () {
+            clear_ai_dict_selector();
             if (sessionStorage.getItem('re_query')) {
                 get_instance(false)
             } else {
@@ -1271,6 +1375,7 @@
 
         //数据库变更获取表/模式名称
         $("#db_name").change(function () {
+            clear_ai_dict_selector();
             $("#table_name").empty();
             $('#table_name').selectpicker('render');
             $('#table_name').selectpicker('refresh');
@@ -1329,6 +1434,7 @@
                             //自动补全提示
                             setSchemasCompleteData(result)
                         }
+                        load_ai_dict_selector();
 
                     } else {
                         alert(data.msg);
@@ -1517,4 +1623,3 @@
         }
     </script>
 {% endblock %}
-

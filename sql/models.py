@@ -978,6 +978,23 @@ class AliyunRdsConfig(models.Model):
         verbose_name_plural = "阿里云rds配置"
 
 
+class AiDict(models.Model):
+    id = models.BigAutoField("主键id", primary_key=True)
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+    instance = models.CharField("数据库实例名称", max_length=255)
+    db = models.CharField("数据库名称", max_length=255)
+    table = models.CharField("表名称", max_length=255)
+    properties = models.TextField("列属性")
+
+    class Meta:
+        managed = True
+        db_table = "ai_dict"
+        verbose_name = "AI字典"
+        verbose_name_plural = "AI字典"
+        unique_together = ("instance", "db", "table")
+
+
 class Permission(models.Model):
     """
     自定义业务权限
@@ -1003,6 +1020,7 @@ class Permission(models.Model):
             ("menu_instance_account", "菜单 实例账号管理"),
             ("menu_param", "菜单 参数配置"),
             ("menu_data_dictionary", "菜单 数据字典"),
+            ("menu_ai_dict", "菜单 AI字典"),
             ("menu_tools", "菜单 工具插件"),
             ("menu_archive", "菜单 数据归档"),
             ("menu_my2sql", "菜单 My2SQL"),
