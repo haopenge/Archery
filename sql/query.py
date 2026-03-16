@@ -411,10 +411,10 @@ def generate_sql(request):
 
     instance_name = request.POST.get("instance_name")
     try:
-        instance = Instance.objects.get(instance_name=instance_name)
+        instance = user_instances(request.user).get(instance_name=instance_name)
     except Instance.DoesNotExist:
         return HttpResponse(
-            json.dumps({"status": 1, "msg": "实例不存在", "data": []}),
+            json.dumps({"status": 1, "msg": "你所在组未关联该实例", "data": []}),
             content_type="application/json",
         )
     db_name = request.POST.get("db_name")

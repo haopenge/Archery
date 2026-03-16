@@ -522,7 +522,8 @@ def ai_dict(request):
         )
     context = {
         "default_query_template": default_query_template,
-        "can_edit_query_template": request.user.is_superuser,
+        "can_edit_query_template": request.user.is_superuser
+        or request.user.has_perm("sql.ai_dict_manage_template"),
     }
     return render(request, "ai_dict.html", context)
 

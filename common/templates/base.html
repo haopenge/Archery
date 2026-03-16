@@ -135,7 +135,7 @@
                                         <a href="/data_dictionary/">数据字典</a>
                                     </li>
                                 {% endif %}
-                                {% if perms.sql.menu_ai_dict %}
+                                {% if perms.sql.menu_ai_dict and perms.sql.ai_dict_manage_template %}
                                     <li>
                                         <a href="/ai_dict/">AI字典</a>
                                     </li>

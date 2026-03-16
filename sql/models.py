@@ -1021,6 +1021,7 @@ class Permission(models.Model):
             ("menu_param", "菜单 参数配置"),
             ("menu_data_dictionary", "菜单 数据字典"),
             ("menu_ai_dict", "菜单 AI字典"),
+            ("ai_dict_manage_template", "管理AI提示词模板"),
             ("menu_tools", "菜单 工具插件"),
             ("menu_archive", "菜单 数据归档"),
             ("menu_my2sql", "菜单 My2SQL"),

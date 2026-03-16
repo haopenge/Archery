@@ -7,7 +7,6 @@ from django.template import Context, Template
 
 from common.config import SysConfig, DEFAULT_QUERY_TEMPLATE_CACHE_KEY
 from common.utils.openai import OpenaiClient, check_openai_config
-from common.utils.permission import superuser_required
 from sql.engines import get_engine
 from sql.models import AiDict
 from sql.utils.resource_group import user_instances
@@ -354,8 +353,12 @@ def ai_execute(request):
     return JsonResponse({"status": 0, "msg": "ok", "data": result})
 
 
-@superuser_required
 def save_query_template(request):
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("sql.ai_dict_manage_template")
+    ):
+        return JsonResponse({"status": 1, "msg": "您无权操作，请联系管理员", "data": []})
     if request.method != "POST":
         return JsonResponse({"status": 1, "msg": "非法调用", "data": []})
     query_template = str(request.POST.get("query_template", "")).strip()
