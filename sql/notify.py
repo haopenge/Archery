@@ -474,6 +474,19 @@ class MailNotifier(LegacyRender):
             )
 
 
+class SlackWebhookNotifier(LegacyRender):
+    name = "slack_webhook"
+    sys_config_key = "slack_webhook_url"
+
+    def send(self):
+        slack_webhook = self.sys_config.get(self.sys_config_key)
+        if not slack_webhook:
+            return
+        msg_sender = MsgSender()
+        for m in self.messages:
+            msg_sender.send_slack_webhook(slack_webhook, f"{m.msg_title}\n{m.msg_content}")
+
+
 def auto_notify(
     sys_config: SysConfig,
     workflow: Union[

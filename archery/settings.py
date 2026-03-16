@@ -75,6 +75,7 @@ env = environ.Env(
             "sql.notify:QywxWebhookNotifier",
             "sql.notify:QywxToUserNotifier",
             "sql.notify:MailNotifier",
+            "sql.notify:SlackWebhookNotifier",
             "sql.notify:GenericWebhookNotifier",
         ],
     ),

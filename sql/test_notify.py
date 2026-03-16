@@ -37,6 +37,7 @@ from sql.notify import (
     notify_for_audit,
     notify_for_my2sql,
     MailNotifier,
+    SlackWebhookNotifier,
 )
 
 User = get_user_model()
@@ -504,6 +505,7 @@ class TestNotify(TestCase):
         (QywxWebhookNotifier, "send_qywx_webhook"),
         (QywxToUserNotifier, "send_wx2user"),
         (MailNotifier, "send_email"),
+        (SlackWebhookNotifier, "send_slack_webhook"),
     ],
 )
 def test_notify_send(

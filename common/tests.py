@@ -185,6 +185,21 @@ class DingTest(TestCase):
             sender.send_ding(self.url, self.content)
             self.assertIn("test_error", lg.output[0])
 
+    @patch("requests.post")
+    def testSlackWebhook(self, post):
+        sender = MsgSender()
+        post.return_value.status_code = 200
+        post.return_value.text = "ok"
+        with self.assertLogs("default", level="DEBUG") as lg:
+            sender.send_slack_webhook(self.url, self.content)
+            post.assert_called_once_with(url=self.url, json={"text": self.content})
+            self.assertIn("Slack Webhook推送成功", lg.output[0])
+        post.return_value.status_code = 400
+        post.return_value.text = "invalid_payload"
+        with self.assertLogs("default", level="ERROR") as lg:
+            sender.send_slack_webhook(self.url, self.content)
+            self.assertIn("invalid_payload", lg.output[0])
+
     def tearDown(self):
         pass
 

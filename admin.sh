@@ -74,6 +74,10 @@ function adduser() {
     echo -e "Add Users:                 [\033[32m ok \033[0m]"
 }
 
+function adduser_auto() {
+    sh ./create_admin_user.sh "$@"
+}
+
 function migration() {
     echo "Migration archery"
     echo "----------------"
@@ -105,12 +109,15 @@ case "$1" in
     adduser )
         adduser
         ;;
+    adduser_auto )
+        adduser_auto "${@:2}"
+        ;;
     migration )
         migration
         ;;
     * )
         echo "************************************************"
-        echo "Usage: sh admin {init|start|stop|restart|adduser|migration}"
+        echo "Usage: sh admin {init|start|stop|restart|adduser|adduser_auto|migration}"
         echo "************************************************"
         ;;
 esac

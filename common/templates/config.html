@@ -1029,6 +1029,19 @@
                                            placeholder="通用 webhook 地址, 每个工单的每个状态转变均会调用" />
                                 </div>
                             </div>
+                            <div id="div-slack-config">
+                                <div class="form-group">
+                                    <label for="slack_webhook_url"
+                                           class="col-sm-4 control-label">Slack Webhook地址</label>
+                                    <div class="col-sm-5">
+                                        <input class="form-control"
+                                               id="slack_webhook_url"
+                                               key="slack_webhook_url"
+                                               value="{{ config.slack_webhook_url }}"
+                                               placeholder="Slack Incoming Webhook 地址" />
+                                    </div>
+                                </div>
+                            </div>
                             <h5 style="color: darkgrey"><b>短信服务</b></h5>
                             <hr/>
                             <div class="form-group">

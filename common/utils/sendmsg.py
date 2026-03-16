@@ -156,6 +156,17 @@ class MsgSender(object):
                 f"钉钉Webhook推送失败错误码\n请求url:{url}\n请求data:{data}\n请求响应:{r_json}"
             )
 
+    @staticmethod
+    def send_slack_webhook(url, content):
+        data = {"text": content}
+        r = requests.post(url=url, json=data)
+        if r.status_code == 200 and r.text.strip().lower() == "ok":
+            logger.debug(f"Slack Webhook推送成功\n通知对象：{url}\n消息内容：{content}")
+        else:
+            logger.error(
+                f"Slack Webhook推送失败\n请求url:{url}\n请求data:{data}\n状态码:{r.status_code}\n请求响应:{r.text}"
+            )
+
     def send_ding2user(self, userid_list, content):
         """
         发送钉钉消息到个人

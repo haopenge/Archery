@@ -14,9 +14,9 @@ RUN apt-get update \
     && pip install "redis>=4.1.0" \
     && cp -f /opt/archery/src/docker/nginx.conf /etc/nginx/ \
     && cp -f /opt/archery/src/docker/supervisord.conf /etc/ \
-    && mv /opt/sqladvisor /opt/archery/src/plugins/ \
-    && mv /opt/soar /opt/archery/src/plugins/ \
-    && mv /opt/my2sql /opt/archery/src/plugins/ \
+    && [ ! -f /opt/sqladvisor ] || mv /opt/sqladvisor /opt/archery/src/plugins/ \
+    && [ ! -f /opt/soar ] || mv /opt/soar /opt/archery/src/plugins/ \
+    && [ ! -f /opt/my2sql ] || mv /opt/my2sql /opt/archery/src/plugins/ \
     && apt-get -yq remove gcc curl \
     && apt-get clean \
     && rm -rf /var/cache/apt/* \
@@ -27,4 +27,3 @@ EXPOSE 9123
 
 #start service
 ENTRYPOINT ["bash", "/opt/archery/src/docker/startup.sh"]
-
