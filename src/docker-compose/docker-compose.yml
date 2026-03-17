@@ -48,7 +48,7 @@ services:
     # dockerhub https://hub.docker.com/r/hhyo/archery
     # github packages https://github.com/hhyo/Archery/pkgs/container/archery
     # 如有需要, 也可以自行build docker 镜像, 替换为自己的镜像
-    image: registry.cn-hangzhou.aliyuncs.com/pubg/archery:v1.14.5-arm64
+    image: registry.cn-hangzhou.aliyuncs.com/pubg/archery:v1.14.6-arm64
     container_name: archery
     restart: always
     depends_on:

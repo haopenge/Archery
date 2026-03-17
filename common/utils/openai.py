@@ -5,9 +5,35 @@ from django.template import Context, Template
 
 logger = logging.getLogger("default")
 
+DEFAULT_QUERY_TEMPLATE = "你是一个熟悉 {{db_type}} 的工程师, 我会给你一些基本信息和要求, 你会生成一个查询语句给我使用, 不要返回任何注释和序号, 仅返回查询语句：{{table_schema}} \n {{user_input}}"
+
+
+def get_query_template(user=None, template_id=""):
+    all_config = SysConfig()
+    if user and getattr(user, "id", None):
+        from sql.models import AiTemplate
+
+        can_manage_all = user.is_superuser or user.has_perm("sql.ai_dict_manage_template")
+        if template_id:
+            template_qs = AiTemplate.objects.filter(id=template_id)
+            if not can_manage_all:
+                template_qs = template_qs.filter(create_id=user.id)
+            selected_template = template_qs.values_list("template", flat=True).first()
+            if selected_template:
+                return selected_template
+        user_template = (
+            AiTemplate.objects.filter(create_id=user.id)
+            .order_by("-update_time", "-id")
+            .values_list("template", flat=True)
+            .first()
+        )
+        if user_template:
+            return user_template
+    return all_config.get("default_query_template", DEFAULT_QUERY_TEMPLATE)
+
 
 class OpenaiClient:
-    def __init__(self):
+    def __init__(self, user=None, template_id=""):
         all_config = SysConfig()
         self.ai_provider = all_config.get("ai_provider", "auto")
         self.openai_base_url = all_config.get("openai_base_url", "")
@@ -22,9 +48,8 @@ class OpenaiClient:
         self.siliconflow_model = all_config.get(
             "siliconflow_model", "Pro/zai-org/GLM-4.7"
         )
-        self.default_query_template = all_config.get(
-            "default_query_template",
-            "你是一个熟悉 {{db_type}} 的工程师, 我会给你一些基本信息和要求, 你会生成一个查询语句给我使用, 不要返回任何注释和序号, 仅返回查询语句：{{table_schema}} \n {{user_input}}",
+        self.default_query_template = get_query_template(
+            user=user, template_id=template_id
         )
         self.provider, self.base_url, self.api_key, self.model = self.resolve_provider()
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)

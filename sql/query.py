@@ -17,7 +17,7 @@ from common.utils.timer import FuncTimer
 from sql.query_privileges import query_priv_check
 from sql.utils.resource_group import user_instances
 from sql.utils.tasks import add_kill_conn_schedule, del_schedule
-from .models import QueryLog, Instance, AiDict
+from .models import QueryLog, Instance, AiDict, AiTemplate
 from sql.engines import get_engine
 
 logger = logging.getLogger("default")
@@ -106,6 +106,23 @@ def ai_dict_options(request):
         rows.append(
             {"table": obj.table, "table_comment": table_comment, "id": obj.id}
         )
+    return HttpResponse(
+        json.dumps({"status": 0, "msg": "ok", "data": rows}),
+        content_type="application/json",
+    )
+
+
+@permission_required("sql.menu_sqlquery", raise_exception=True)
+def ai_template_options(request):
+    can_manage_all = request.user.is_superuser or request.user.has_perm(
+        "sql.ai_dict_manage_template"
+    )
+    queryset = AiTemplate.objects.all()
+    if not can_manage_all:
+        queryset = queryset.filter(create_id=request.user.id)
+    rows = []
+    for obj in queryset.order_by("-update_time", "-id"):
+        rows.append({"id": obj.id, "name": obj.name or f"模板{obj.id}"})
     return HttpResponse(
         json.dumps({"status": 0, "msg": "ok", "data": rows}),
         content_type="application/json",
@@ -433,6 +450,7 @@ def generate_sql(request):
     tb_name = request.POST.get("tb_name")
     ai_dict_tables = str(request.POST.get("ai_dict_tables", "")).strip()
     selected_ai_dict_tables = [i.strip() for i in ai_dict_tables.split(",") if i.strip()]
+    ai_template_id = str(request.POST.get("ai_template_id", "")).strip()
 
     result = {"status": 0, "msg": "ok", "data": ""}
     try:
@@ -456,7 +474,7 @@ def generate_sql(request):
                 table_schema = ""
         elif not table_schema:
             table_schema = ""
-        openai_client = OpenaiClient()
+        openai_client = OpenaiClient(user=request.user, template_id=ai_template_id)
         result["data"] = openai_client.generate_sql_by_openai(
             db_type, table_schema, query_desc, ai_dict=ai_dict_schema
         )

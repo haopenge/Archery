@@ -986,6 +986,8 @@ class AiDict(models.Model):
     db = models.CharField("数据库名称", max_length=255)
     table = models.CharField("表名称", max_length=255)
     properties = models.TextField("列属性")
+    create_id = models.IntegerField("创建用户", default=0, db_index=True)
+    update_id = models.IntegerField("更新用户", default=0, db_index=True)
 
     class Meta:
         managed = True
@@ -993,6 +995,22 @@ class AiDict(models.Model):
         verbose_name = "AI字典"
         verbose_name_plural = "AI字典"
         unique_together = ("instance", "db", "table")
+
+
+class AiTemplate(models.Model):
+    id = models.BigAutoField("主键id", primary_key=True)
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+    name = models.CharField("名称", max_length=64, default="")
+    template = models.TextField("提示词模板")
+    create_id = models.IntegerField("创建用户", default=0, db_index=True)
+    update_id = models.IntegerField("更新用户", default=0, db_index=True)
+
+    class Meta:
+        managed = True
+        db_table = "ai_template"
+        verbose_name = "AI提示词模板"
+        verbose_name_plural = "AI提示词模板"
 
 
 class Permission(models.Model):

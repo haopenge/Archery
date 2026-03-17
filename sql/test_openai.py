@@ -1,6 +1,7 @@
 from typing import List
 import pytest
-from common.utils.openai import OpenaiClient
+from common.utils.openai import OpenaiClient, get_query_template
+from sql.models import AiTemplate
 
 
 def test_check_openai(admin_client, setup_sys_config):
@@ -113,3 +114,16 @@ def test_generate_sql(admin_client, db_instance, data, expected_msg):
     response = admin_client.post("/query/generate_sql/", data=data)
     assert response.status_code == 200
     assert response.json()["msg"] == expected_msg
+
+
+def test_get_query_template_by_user(setup_sys_config, django_user_model):
+    setup_sys_config.set("default_query_template", "global template")
+    user = django_user_model.objects.create(username="ai_user_template")
+    try:
+        assert get_query_template(user=user) == "global template"
+        AiTemplate.objects.create(
+            name="模板B", create_id=user.id, update_id=user.id, template="user template"
+        )
+        assert get_query_template(user=user) == "user template"
+    finally:
+        user.delete()

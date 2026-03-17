@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from django.conf import settings
 from common.config import SysConfig
+from common.utils.openai import get_query_template
 from sql.engines import get_engine, engine_map
 from common.utils.permission import superuser_required
 from common.utils.convert import Convert
@@ -35,6 +36,7 @@ from .models import (
     ArchiveConfig,
     AuditEntry,
     TwoFactorAuthConfig,
+    AiTemplate,
 )
 from sql.utils.workflow_audit import Audit, AuditV2, AuditException
 from sql.utils.sql_review import (
@@ -515,15 +517,22 @@ def data_dictionary(request):
 
 @permission_required("sql.menu_ai_dict", raise_exception=True)
 def ai_dict(request):
-    default_query_template = SysConfig().get("default_query_template", "")
+    template_obj = (
+        AiTemplate.objects.filter(create_id=request.user.id)
+        .order_by("-update_time", "-id")
+        .first()
+    )
+    default_query_template = (
+        template_obj.template if template_obj else get_query_template(user=request.user)
+    )
     if not default_query_template:
         default_query_template = (
             "你是一个熟悉 {{db_type}} 的工程师, 我会给你一些基本信息和要求, 你会生成一个查询语句给我使用, 不要返回任何注释和序号, 仅返回查询语句：\n\n数据字典（仅限操作以下表，严禁访问任何其他表）：\n{{ai_dict}}\n\n{{user_input}}\n\n根据ai字典的配置列表，将每行记录按\netl_user_invite_relation (用户邀请关系表){\n    user_id bigint 用户id,\n    up_user text 上级用户，C为当前用户，多级示例 A|B,\n    up_user_with_me text 上级用户id and me, C为当前用户，多级示例 A|B|C\n}\n格式，替换 ai 模板中的 ai_dict。"
         )
     context = {
         "default_query_template": default_query_template,
-        "can_edit_query_template": request.user.is_superuser
-        or request.user.has_perm("sql.ai_dict_manage_template"),
+        "current_template_id": template_obj.id if template_obj else "",
+        "can_edit_query_template": True,
     }
     return render(request, "ai_dict.html", context)
 

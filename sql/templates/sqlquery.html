@@ -91,7 +91,16 @@
                                 class="form-control selectpicker"
                                 data-live-search="true" data-live-search-placeholder="搜索AI字典"
                                 data-actions-box="true" multiple
-                                title="AI字典范围(可多选)"
+                                title="AI字典范围(可多选，不选范围默认全部)"
+                                data-width="100%">
+                        </select>
+                    </div>
+                    <div id="ai_template_wrapper" style="display: inline-block;">
+                        <select id="ai_template_id" name="ai_template_id"
+                                class="form-control selectpicker"
+                                data-live-search="true"
+                                data-live-search-placeholder="搜索提示词模板"
+                                title="AI提示词模板"
                                 data-width="100%">
                         </select>
                     </div>
@@ -100,7 +109,7 @@
                         <span class="fa fa-question-circle" />
                     </button>
                     <div class="clearfix"></div>
-                    <textarea id="generateDesc" class="form-control" style="display: none;width: 70%;margin-top: 8px;" placeholder="AI 查询描述" rows=1></textarea>
+                    <textarea id="generateDesc" class="form-control" style="display: none;width: 100%;margin-top: 8px;" placeholder="AI 查询描述" rows=1></textarea>
                 </div>
                 <div class="panel-body">
                     <form id="form-sqlquery" action="/sqlquery/" method="post" class="form-horizontal" role="form">
@@ -553,6 +562,7 @@
                     if (data["data"]) {
                         $("#generateDesc").show()
                         update_ai_dict_selector()
+                        load_ai_template_selector()
                         $("#btn-generatesql").show()
                         $("#btn-openaiTooltip").show()
                     }
@@ -565,6 +575,7 @@
 
         function update_ai_dict_selector() {
             $("#ai_dict_tables_wrapper").css("display", "inline-block")
+            $("#ai_template_wrapper").css("display", "inline-block")
         }
 
         function clear_ai_dict_selector() {
@@ -602,6 +613,32 @@
                     }
                     $("#ai_dict_tables").selectpicker('render');
                     $("#ai_dict_tables").selectpicker('refresh');
+                }
+            });
+        }
+
+        function load_ai_template_selector() {
+            $("#ai_template_id").empty();
+            $("#ai_template_id").selectpicker('render');
+            $("#ai_template_id").selectpicker('refresh');
+            $.ajax({
+                type: "get",
+                url: "/query/ai_template_options/",
+                dataType: "json",
+                success: function (data) {
+                    if (data.status !== 0) {
+                        return;
+                    }
+                    var result = data.data || [];
+                    for (var i = 0; i < result.length; i++) {
+                        var option = "<option value=\"" + result[i].id + "\">" + result[i].name + "</option>";
+                        $("#ai_template_id").append(option);
+                    }
+                    $("#ai_template_id").selectpicker('render');
+                    if (result.length > 0) {
+                        $("#ai_template_id").selectpicker('val', result[0].id);
+                    }
+                    $("#ai_template_id").selectpicker('refresh');
                 }
             });
         }
@@ -740,11 +777,18 @@
                 var instance_name = $("#instance_name").val()
                 var db_name = $("#db_name").val()
                 var query_desc = $("#generateDesc").val()
+                var aiDictCount = $("#ai_dict_tables option").length
+                var aiTemplateCount = $("#ai_template_id option").length
+                var aiTemplateId = $("#ai_template_id").val()
 
                 if (!instance_name) {
                     alert("请选择实例！")
                 } else if (!db_name) {
                     alert("请选择数据库！")
+                } else if (aiDictCount === 0) {
+                    alert("请先配置AI字典")
+                } else if (aiTemplateCount === 0 || !aiTemplateId) {
+                    alert("请先配置提示词模板")
                 } else if (!query_desc) {
                     alert("请输入查询描述！")
                 } else {
@@ -1203,6 +1247,7 @@
                 schema_name: $("#schema_name").val(),
                 tb_name: $("#table_name").val(),
                 ai_dict_tables: ($("#ai_dict_tables").val() || []).join(","),
+                ai_template_id: $("#ai_template_id").val(),
                 query_desc: $("#generateDesc").val(),
             }
             //提交请求
@@ -1225,7 +1270,14 @@
                 },
                 success: function (data) {
                     if (data.status === 0) {
-                        editor.setValue(data["data"]);
+                        var sqlText = String(data["data"] || "");
+                        if (/^\s*```/i.test(sqlText)) {
+                            sqlText = sqlText
+                                .replace(/^\s*```(?:sql)?\s*\n?/i, "")
+                                .replace(/\n?\s*```\s*$/i, "")
+                                .trim();
+                        }
+                        editor.setValue(sqlText);
                         editor.clearSelection();
                         showGenerateSqlTip("SQL 生成完成", false);
                     } else {
