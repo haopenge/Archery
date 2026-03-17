@@ -9,8 +9,8 @@ VERSION="v1.14.1"
 ARM_IMAGE=""
 AMD_IMAGE=""
 IMAGE_PREFIX="registry.cn-hangzhou.aliyuncs.com/pubg/archery"
-ARM_BASE_IMAGE="hhyo/archery-base:arm64-local"
-AMD_BASE_IMAGE="hhyo/archery-base:amd64-local"
+ARM_BASE_IMAGE="registry.cn-hangzhou.aliyuncs.com/pubg/archery-base:arm64-local"
+AMD_BASE_IMAGE="registry.cn-hangzhou.aliyuncs.com/pubg/archery-base:amd64-local"
 PYTHON_BASE_IMAGE="docker.m.daocloud.io/library/python:3.11-bullseye"
 HTTP_PROXY_ARG="${HTTP_PROXY:-}"
 HTTPS_PROXY_ARG="${HTTPS_PROXY:-}"
@@ -28,8 +28,8 @@ usage() {
   -v <tag>                     版本标签，默认 v1.14.1
   --arm-image <image:tag>      arm64 目标镜像
   --amd-image <image:tag>      amd64 目标镜像
-  --arm-base-image <image:tag> arm64 构建时使用的基础镜像，默认 hhyo/archery-base:arm64-local
-  --amd-base-image <image:tag> amd64 构建时使用的基础镜像，默认 hhyo/archery-base:amd64-local
+  --arm-base-image <image:tag> arm64 构建时使用的基础镜像，默认 registry.cn-hangzhou.aliyuncs.com/pubg/archery-base:arm64-local
+  --amd-base-image <image:tag> amd64 构建时使用的基础镜像，默认 registry.cn-hangzhou.aliyuncs.com/pubg/archery-base:amd64-local
   --python-base-image <image>  Dockerfile-base 的 Python 基础镜像，默认 library/python:3.11-bullseye
   --http-proxy <url>           传递 HTTP_PROXY 给 Dockerfile-base
   --https-proxy <url>          传递 HTTPS_PROXY 给 Dockerfile-base
