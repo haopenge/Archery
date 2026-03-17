@@ -218,13 +218,21 @@ def lists(request):
     return JsonResponse({"status": 0, "msg": "ok", "data": rows})
 
 
-def build_ai_dict_text(dict_obj):
+def build_ai_dict_text(dict_obj, index=None):
     table_comment = ""
+    business_logic = ""
     columns = []
     try:
         properties = json.loads(dict_obj.properties)
         if isinstance(properties, dict):
             table_comment = str(properties.get("table_comment", "") or "").strip()
+            business_logic = str(
+                properties.get("business_logic")
+                or properties.get("business_rules")
+                or properties.get("biz_logic")
+                or properties.get("logic")
+                or ""
+            ).strip()
             columns = properties.get("columns", [])
         elif isinstance(properties, list):
             columns = properties
@@ -241,16 +249,20 @@ def build_ai_dict_text(dict_obj):
             continue
         column_type = str(item.get("column_type", "")).strip()
         comment = str(item.get("comment", "")).strip()
-        parts = [column_name]
+        parts = [f"- {column_name}:"]
         if column_type:
             parts.append(column_type)
         if comment:
-            parts.append(comment)
-        lines.append(f"    {' '.join(parts)},")
+            parts.append(f"({comment})")
+        lines.append(" ".join(parts))
     title = dict_obj.table
     if table_comment:
         title = f"{title} ({table_comment})"
-    return f"{title}{{\n" + "\n".join(lines) + "\n}"
+    title_prefix = f"{index}. " if index else ""
+    parts = [f"{title_prefix}{title}", "\n".join(lines)]
+    if business_logic:
+        parts.append(f"* 业务逻辑：{business_logic}")
+    return "\n".join(parts)
 
 
 @permission_required("sql.menu_ai_dict", raise_exception=True)
@@ -291,7 +303,12 @@ def template_preview(request):
     ).first()
     if instance_obj and instance_obj.db_type:
         db_type = instance_obj.db_type
-    ai_dict_text = "\n\n".join([build_ai_dict_text(obj) for obj in queryset.order_by("table")])
+    ai_dict_text = "\n\n".join(
+        [
+            build_ai_dict_text(obj, index=i)
+            for i, obj in enumerate(queryset.order_by("table"), start=1)
+        ]
+    )
     try:
         template = Template(query_template)
         content = template.render(
@@ -339,7 +356,9 @@ def ai_execute(request):
     ).first()
     if instance_obj and instance_obj.db_type:
         db_type = instance_obj.db_type
-    ai_dict_text = "\n\n".join([build_ai_dict_text(obj) for obj in queryset])
+    ai_dict_text = "\n\n".join(
+        [build_ai_dict_text(obj, index=i) for i, obj in enumerate(queryset, start=1)]
+    )
     try:
         openai_client = OpenaiClient()
         result = openai_client.generate_sql_by_openai(

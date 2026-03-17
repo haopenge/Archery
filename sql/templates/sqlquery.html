@@ -1182,9 +1182,19 @@
             var generateBtn = $("#btn-generatesql");
             var originalText = generateBtn.data("origin-text") || generateBtn.val();
             generateBtn.data("origin-text", originalText);
-            generateBtn.val("生成中...");
+            if (window.generateSqlLoadingTimer) {
+                clearInterval(window.generateSqlLoadingTimer);
+            }
+            var loadingFrames = ["生成中.", "生成中..", "生成中..."];
+            var frameIndex = 0;
+            generateBtn.val(loadingFrames[frameIndex]);
+            window.generateSqlLoadingTimer = setInterval(function () {
+                frameIndex = (frameIndex + 1) % loadingFrames.length;
+                generateBtn.val(loadingFrames[frameIndex]);
+            }, 300);
             generateBtn.addClass("disabled");
             generateBtn.prop("disabled", true);
+            showGenerateSqlTip("SQL 生成中...", false);
             var optgroup = $('#instance_name :selected').parent().attr('label');
             const data = {
                 db_type: optgroup,
@@ -1202,6 +1212,10 @@
                 dataType: "json",
                 data: data,
                 complete: function () {
+                    if (window.generateSqlLoadingTimer) {
+                        clearInterval(window.generateSqlLoadingTimer);
+                        window.generateSqlLoadingTimer = null;
+                    }
                     generateBtn.val(originalText);
                     generateBtn.removeClass("disabled");
                     generateBtn.prop("disabled", false);

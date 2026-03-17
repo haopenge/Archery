@@ -30,15 +30,23 @@ def build_ai_dict_schema(
     if table_names:
         queryset = queryset.filter(table__in=table_names)
     tables = []
-    for obj in queryset.order_by("table"):
+    for index, obj in enumerate(queryset.order_by("table"), start=1):
         try:
             properties = json.loads(obj.properties)
         except Exception:
             continue
         table_comment = ""
+        business_logic = ""
         columns = []
         if isinstance(properties, dict):
             table_comment = str(properties.get("table_comment", "") or "").strip()
+            business_logic = str(
+                properties.get("business_logic")
+                or properties.get("business_rules")
+                or properties.get("biz_logic")
+                or properties.get("logic")
+                or ""
+            ).strip()
             columns = properties.get("columns", [])
         elif isinstance(properties, list):
             columns = properties
@@ -53,18 +61,21 @@ def build_ai_dict_schema(
                 continue
             column_type = str(item.get("column_type", "")).strip()
             comment = str(item.get("comment", "")).strip()
-            column_parts = [column_name]
+            column_parts = [f"- {column_name}:"]
             if column_type:
                 column_parts.append(column_type)
             if comment:
-                column_parts.append(comment)
-            column_lines.append(f"    {' '.join(column_parts)},")
+                column_parts.append(f"({comment})")
+            column_lines.append(" ".join(column_parts))
         if not column_lines:
             continue
         table_title = obj.table
         if table_comment:
             table_title = f"{table_title} ({table_comment})"
-        tables.append(f"{table_title}{{\n" + "\n".join(column_lines) + "\n}")
+        table_parts = [f"{index}. {table_title}", "\n".join(column_lines)]
+        if business_logic:
+            table_parts.append(f"* 业务逻辑：{business_logic}")
+        tables.append("\n".join(table_parts))
     return "\n\n".join(tables)
 
 

@@ -72,7 +72,8 @@ class OpenaiClient:
         logger.info(messages)
         try:
             res = self.request_chat_completion(messages)
-            return res.choices[0].message.content
+            content = res.choices[0].message.content
+            return str(content or "").lstrip()
         except Exception as e:
             raise ValueError(f"请求openai生成查询语句失败: {e}")
 
