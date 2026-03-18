@@ -188,7 +188,7 @@ def lists(request):
     if instance_name:
         queryset = queryset.filter(instance=instance_name)
     if db_name:
-        queryset = queryset.filter(db=db_name)
+        queryset = queryset.filter(db__icontains=db_name)
     if keyword:
         queryset = queryset.filter(
             Q(instance__icontains=keyword)
@@ -431,7 +431,10 @@ def template_list(request):
     if not can_manage_all:
         queryset = queryset.filter(create_id=request.user.id)
     if keyword:
-        queryset = queryset.filter(Q(id=keyword) | Q(name__icontains=keyword))
+        keyword_filter = Q(name__icontains=keyword)
+        if keyword.isdigit():
+            keyword_filter = Q(id=int(keyword)) | keyword_filter
+        queryset = queryset.filter(keyword_filter)
     queryset = queryset.order_by("-update_time", "-id")
     user_ids = set()
     for obj in queryset:
